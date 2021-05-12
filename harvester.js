@@ -219,12 +219,18 @@ async function download({ downloadUrl, name, size }, destDir) {
   console.log(`Downloading plot to ${tmpfname}...`)
   
   process.stdout.write('Progress: 0%\r')
+
+  let intpercentage = 0
   const downloader = new Downloader({     
     url: downloadUrl,     
     directory: destDir,
     fileName: tmpfname,
-    onProgress: function(percentage,chunk,remainingSize) {
-      process.stdout.write('Progress: ' + percentage + '\r')
+    onProgress: function(percentage, chunk, remainingSize) {
+      if (intpercentage !== percentage | 0) {
+        intpercentage = percentage | 0
+        process.stdout.write('Progress: ' + intpercentage + '\r')
+        
+      }
     } 
   }) 
 

@@ -261,7 +261,10 @@ function silentRm(filepath) {
 
 function watchFileSize(fpath, ms, callback) {
   const interval = setInterval(function () {
-    callback(fs.statSync(fpath).size)
+    try {
+      callback(fs.statSync(fpath).size)
+    } catch (error) {}
+    
   }, ms)
 
   return function () {

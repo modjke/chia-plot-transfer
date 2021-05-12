@@ -143,13 +143,14 @@ void async function main() {
         let retries = 10
 
         let valid = false
-        while (!valid || retries-- > 0) {
+        while (!valid && retries-- > 0) {
           valid = await chiaValidatePlot(plotPath)          
 
           if (!valid) await new Promise(resolve => setTimeout(resolve, 5000)) 
         }
         
         if (valid) {
+          console.log(`Good plot: `, plotPath)
           await farmer.remove(plot)
         } else {
           silentRm(plotPath)

@@ -12,8 +12,101 @@ const exec = promisify(require('child_process').exec)
 console.log(`[Harvester] Starting up...`)
 const config = loadConfig()
 
-void async function main() {
 
+class DriveManager {
+  constructor(parentMount) {
+    this.parentMount = path.resolve(__dirname, parentMount)
+  }
+
+  async update() {
+    const entries = fs.readdirSync(this.parentMount).map(entry => path.join(this.parentMount, entry))
+    const drivePaths = []
+    const dirContentStats = entries.map(entry => fs.statSync(entry))
+
+    for (let i = 0; i < dirContentStats.length; i++) {
+      const stats = dirContentStats[i]
+      const entry = entries[i]
+      if (stats.isDirectory()) {
+        drivePaths.push(entry)
+      }
+    }
+
+    const drivesFreeSpaces = await Promise.all(drivePaths.map(p => checkDiskUsage(p)))
+
+
+    this.drives = drivePaths.map((p, i) => {
+      const bytes = drivesFreeSpaces[i]
+
+      return {
+        path: p,
+        bytes
+      }
+    })
+
+
+  }
+
+  getDrive(size) {
+    const drive = this.drives.find(drive => {
+      return drive.bytes.available > size
+    })
+
+    if (!drive) {
+      return null
+    }
+
+    return drive.path
+  }
+}
+
+class Farmer {
+  constructor(url) {
+    this.url = url
+    if (!this.url.endsWith('/')) {
+      this.url += '/'
+    }
+
+    this.busy = false
+  }
+
+  async getPlot() {
+    try {
+      const res = await axios.get(this.url)
+      if (!Array.isArray(res.data)) {
+        throw new Error(`Recieved data is not an array`)
+      }
+
+      if (res.data.length) {
+        const [name] = res.data
+
+        const downloadUrl = this.url + 'download/' + name
+
+        const { headers: { 'content-length': contentLength } } = await axios.head(downloadUrl)
+        const size = parseInt(contentLength)
+        if (isNaN(size)) {
+          throw new Error(`Invalid content-length`, contentLength)
+        }
+
+        return {
+          downloadUrl,
+          size,
+          name
+        }
+      }
+    } catch (error) {
+      console.error(error)
+    }
+
+    return null;
+  }
+
+  async remove({ name }) {
+    await axios.get(this.url + 'remove/' + name)
+  }
+}
+
+
+void async function main() {
   const driveManager = new DriveManager(config.parentMount)
 
   console.log(`Updating drives list...`)
@@ -160,96 +253,5 @@ function silentRm(filepath) {
     fs.unlinkSync(filepath)
   } catch (ignore) {
 
-  }
-}
-class DriveManager {
-  constructor(parentMount) {
-    this.parentMount = path.resolve(__dirname, parentMount)
-  }
-
-  async update() {
-    const entries = fs.readdirSync(this.parentMount).map(entry => path.join(this.parentMount, entry))
-    const drivePaths = []
-    const dirContentStats = entries.map(entry => fs.statSync(entry))
-
-    for (let i = 0; i < dirContentStats.length; i++) {
-      const stats = dirContentStats[i]
-      const entry = entries[i]
-      if (stats.isDirectory()) {
-        drivePaths.push(entry)
-      }
-    }
-
-    const drivesFreeSpaces = await Promise.all(drivePaths.map(p => checkDiskUsage(p)))
-
-
-    this.drives = drivePaths.map((p, i) => {
-      const bytes = drivesFreeSpaces[i]
-
-      return {
-        path: p,
-        bytes
-      }
-    })
-
-
-  }
-
-  getDrive(size) {
-    const drive = this.drives.find(drive => {
-      return drive.bytes.available > size
-    })
-
-    if (!drive) {
-      return null
-    }
-
-    return drive.path
-  }
-}
-
-class Farmer {
-  constructor(url) {
-    this.url = url
-    if (!this.url.endsWith('/')) {
-      this.url += '/'
-    }
-
-    this.busy = false
-  }
-
-  async getPlot() {
-    try {
-      const res = await axios.get(this.url)
-      if (!Array.isArray(res.data)) {
-        throw new Error(`Recieved data is not an array`)
-      }
-
-      if (res.data.length) {
-        const [name] = res.data
-
-        const downloadUrl = this.url + 'download/' + name
-
-        const { headers: { 'content-length': contentLength } } = await axios.head(downloadUrl)
-        const size = parseInt(contentLength)
-        if (isNaN(size)) {
-          throw new Error(`Invalid content-length`, contentLength)
-        }
-
-        return {
-          downloadUrl,
-          size,
-          name
-        }
-      }
-    } catch (error) {
-      console.error(error)
-    }
-
-    return null;
-  }
-
-  async remove({ name }) {
-    await axios.get(this.url + 'remove/' + name)
   }
 }

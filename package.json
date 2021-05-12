@@ -16,6 +16,7 @@
     "koa": "^2.13.1",
     "koa-body": "^4.2.0",
     "koa-respond": "^2.1.0",
+    "nodejs-file-downloader": "^4.5.3",
     "progress-stream": "^2.0.0"
   }
 }

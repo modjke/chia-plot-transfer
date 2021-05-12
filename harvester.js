@@ -205,24 +205,26 @@ async function chiaExec(command) {
 async function download({ downloadUrl, name, size }, destDir) {
 
   
-  const dstfname = path.join(destDir, name)
+  const dstfpath = path.join(destDir, name)
 
-  if (fs.existsSync(dstfname)) {
-    return reject(new Error(`dest file already exists...`))
+  if (fs.existsSync(dstfpath)) {
+    throw new Error(`dest file already exists...`)
   }
 
-  const tmpfname = path.join(destDir, name + '.tmp')
-  silentRm(tmpfname)
+  const tmpfname = name + '.tmp'
+  const tmpfpath = path.join(destDir, tmpfname)
+  silentRm(tmpfpath)
+  
 
   console.log(`Downloading plot to ${tmpfname}...`)
   
-  console.log(`Progress: 0%`)
+  process.stdout.write('Progress: 0%\r')
   const downloader = new Downloader({     
     url: downloadUrl,     
     directory: destDir,
     fileName: tmpfname,
     onProgress: function(percentage,chunk,remainingSize) {
-      process.stdout.write(`Progress: ${percentage}%`)
+      process.stdout.write('Progress: ' + percentage + '\r')
     } 
   }) 
 
@@ -230,16 +232,16 @@ async function download({ downloadUrl, name, size }, destDir) {
   try {
     await downloader.download();   
 
-    console.log(`Renaming plot ot ${dstfname}...`)
-    fs.renameSync(tmpfname, dstfname)
+    console.log(`\nRenaming plot ot ${dstfpath}...`)
+    fs.renameSync(tmpfpath, dstfpath)
 
-    return dstfname
+    return dstfpath
   } catch (error) {
     console.error(`Encountered error while downloading plot: ${name}`)
     console.error(error)
 
     silentRm(tmpfname)
-    silentRm(dstfname)    
+    silentRm(dstfpath)    
 
     throw new Error(`Unable to download`)
   }

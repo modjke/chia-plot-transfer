@@ -203,7 +203,7 @@ async function chiaExec(command) {
 
 async function curlExec(command) {
   try {
-    console.log(`[curl] ${command}`)
+    // console.log(`[curl] ${command}`)
     const shell = `/bin/bash`
     const { stdout = '', stderr = '' } = await exec(`${shell} -c 'curl ${command}'`)
     return { ok: true, stdout, stderr }
@@ -227,7 +227,14 @@ async function download({ downloadUrl, name, size }, destDir) {
 
 
   try {
+    process.stdout.write('Progress: 0%\r')
+    const stopWatch = watchFileSize(tmpfpath, 5000, (currentSize) => {
+      const prog = (100 * currentSize / size).toFixed(1)
+      process.stdout.write(`Progress: ${prog}%\r`)
+    })
     await curlExec(`-o ${tmpfpath} ${downloadUrl}`)  
+
+    stopWatch()
 
     console.log(`\nRenaming plot ot ${dstfpath}...`)
     fs.renameSync(tmpfpath, dstfpath)
@@ -249,5 +256,15 @@ function silentRm(filepath) {
     fs.unlinkSync(filepath)
   } catch (ignore) {
 
+  }
+}
+
+function watchFileSize(fpath, ms, callback) {
+  const interval = setInterval(function () {
+    callback(fs.statSync(fpath).size)
+  }, ms)
+
+  return function () {
+    clearInterval(interval)
   }
 }

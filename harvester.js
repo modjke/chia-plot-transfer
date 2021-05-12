@@ -36,7 +36,7 @@ void async function main() {
 
         if (!plot) continue
 
-        console.log(`Found a plot to download: ${plot.name}`)
+        console.log(`Found a plot ${farmer.url} > ${plot.name}`)
 
         const drivePath = await driveManager.getDrive(plot.size)
         if (!drivePath) {
@@ -107,7 +107,7 @@ async function download({ downloadUrl, name, size }, destDir) {
 
       const progress = createProgressStream({
         length: size,
-        time: 10000
+        time: 120000
       })
 
       progress.on('progress', progress => {

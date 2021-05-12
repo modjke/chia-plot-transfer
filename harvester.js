@@ -3,10 +3,9 @@ const fs = require('fs')
 const { promisify } = require('util')
 const path = require('path')
 const checkDiskUsage = promisify(require('diskusage').check)
-const http = require('http')
 const axios = require('axios').default
-const stream = require('stream')
-const createProgressStream = require('progress-stream')
+const Downloader = require('nodejs-file-downloader');
+
 const exec = promisify(require('child_process').exec)
 
 console.log(`[Harvester] Starting up...`)
@@ -204,62 +203,46 @@ async function chiaExec(command) {
 }
 
 async function download({ downloadUrl, name, size }, destDir) {
-  return new Promise((resolve, reject) => {
-    const dstfname = path.join(destDir, name)
 
-    if (fs.existsSync(dstfname)) {
-      return reject(new Error(`dest file already exists...`))
-    }
+  
+  const dstfname = path.join(destDir, name)
 
-    const tmpfname = path.join(destDir, name + '.tmp')
+  if (fs.existsSync(dstfname)) {
+    return reject(new Error(`dest file already exists...`))
+  }
 
-    console.log(`Downloading plot to ${tmpfname}...`)
+  const tmpfname = path.join(destDir, name + '.tmp')
+  silentRm(tmpfname)
+
+  console.log(`Downloading plot to ${tmpfname}...`)
+  
+  console.log(`Progress: 0%`)
+  const downloader = new Downloader({     
+    url: downloadUrl,     
+    directory: destDir,
+    fileName: tmpfname,
+    onProgress: function(percentage,chunk,remainingSize) {
+      process.stdout.write(`Progress: ${percentage}%`)
+    } 
+  }) 
 
 
-    http.get(downloadUrl, response => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`Non 200 status`))
-        return
-      }
+  try {
+    await downloader.download();   
 
-      const progress = createProgressStream({
-        length: size,
-        time: 120000
-      })
+    console.log(`Renaming plot ot ${dstfname}...`)
+    fs.renameSync(tmpfname, dstfname)
 
-      progress.on('progress', progress => {
-        console.log(`Percentage: ${progress.percentage}%, ETA: ${(progress.eta / 60).toFixed(1)} min`)
-      })
+    return dstfname
+  } catch (error) {
+    console.error(`Encountered error while downloading plot: ${name}`)
+    console.error(error)
 
-      stream.pipeline(
-        response,
-        progress,
-        fs.createWriteStream(tmpfname),
-        err => {
-          if (err) {
-            console.error(err)
+    silentRm(tmpfname)
+    silentRm(dstfname)    
 
-            silentRm(tmpfname)
-
-            reject(new Error(`Stream ended with error`))
-          } else {
-            try {
-              console.log(`Renaming plot ot ${dstfname}...`)
-              fs.renameSync(tmpfname, dstfname)
-
-              resolve(dstfname)
-            } catch (error) {
-              silentRm(tmpfname)
-              silentRm(dstfname)
-
-              reject(new Error(`Unable to rename tmp file into .plot`))
-            }
-          }
-        }
-      )
-    })
-  })
-
+    throw new Error(`Unable to download`)
+  }
 }
 
 function silentRm(filepath) {

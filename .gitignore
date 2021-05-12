@@ -1,4 +1,4 @@
 node_modules
 /harvester.json
 /farmer.json
-/*.plot
+/mock

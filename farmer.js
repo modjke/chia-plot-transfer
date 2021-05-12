@@ -40,7 +40,7 @@ function startServer(plotsDirectory, port = 9999, hostname = '0.0.0.0') {
     ctx.body = getPlots()
   });
 
-  router.get('/download/:name', (ctx, next) => {
+  router.get('/download/:name', async (ctx, next) => {
 
     try {
       const { name } = ctx.params
@@ -53,9 +53,13 @@ function startServer(plotsDirectory, port = 9999, hostname = '0.0.0.0') {
 
       const file = path.resolve(plotsDirectory, name) 
       
+      const stats = await fs.stat(file)
+
       ctx.body = createReadStream(file)
+
       ctx.set('Content-disposition', 'attachment; filename=' + name);
       ctx.set('Content-type', 'application/octet-stream');
+      ctx.set('Content-length', stats.size)
     } catch (error) {
       console.log(error)
 

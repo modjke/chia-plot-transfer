@@ -176,13 +176,13 @@ function loadConfig() {
 }
 
 async function chiaValidatePlot(plot) {
-  const { ok, stderr } = chiaExec(`plots check -g ${plot}`)
+  const { ok, stderr } = await chiaExec(`plots check -g ${plot}`)
   if (!ok) {
     return false
   }
 
   const match = /Found\s(\d+)\svalid\splots/g.exec(stderr)
-  const validPlotCount = (match || [])[1] || 0
+  const validPlotCount = parseInt((match || [])[1] || '0')
 
   if (validPlotCount > 1) {
     console.error(`ERROR: more than one valid plot returned by chiaValidate`)

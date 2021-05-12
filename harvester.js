@@ -139,7 +139,16 @@ void async function main() {
         }
 
         const plotPath = await download(plot, drivePath)
-        const valid = await chiaValidatePlot(plotPath)
+
+        let retries = 10
+
+        let valid = false
+        while (!valid || retries-- > 0) {
+          valid = await chiaValidatePlot(plotPath)          
+
+          if (!valid) await new Promise(resolve => setTimeout(resolve, 5000)) 
+        }
+        
         if (valid) {
           await farmer.remove(plot)
         } else {

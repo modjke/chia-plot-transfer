@@ -227,7 +227,7 @@ async function download({ downloadUrl, name, size }, destDir) {
 
 
   try {
-    await curlExec(`-o ${tmpfname} ${downloadUrl}`)  
+    await curlExec(`-o ${tmpfpath} ${downloadUrl}`)  
 
     console.log(`\nRenaming plot ot ${dstfpath}...`)
     fs.renameSync(tmpfpath, dstfpath)

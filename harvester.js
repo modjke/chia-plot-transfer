@@ -4,8 +4,6 @@ const { promisify } = require('util')
 const path = require('path')
 const checkDiskUsage = promisify(require('diskusage').check)
 const axios = require('axios').default
-const Downloader = require('nodejs-file-downloader');
-
 const exec = promisify(require('child_process').exec)
 
 console.log(`[Harvester] Starting up...`)
@@ -202,14 +200,22 @@ async function chiaExec(command) {
   }
 }
 
-async function download({ downloadUrl, name, size }, destDir) {
 
-  
-  const dstfpath = path.join(destDir, name)
-
-  if (fs.existsSync(dstfpath)) {
-    throw new Error(`dest file already exists...`)
+async function curlExec(command) {
+  try {
+    console.log(`[curl] ${command}`)
+    const shell = `/bin/bash`
+    const { stdout = '', stderr = '' } = await exec(`${shell} -c 'curl ${command}'`)
+    return { ok: true, stdout, stderr }
+  } catch (error) {
+    console.log(`it's ok if you are on windows`, error)
+    return { ok: false, stdout: '', stderr: '' }
   }
+}
+
+async function download({ downloadUrl, name, size }, destDir) {
+  const dstfpath = path.join(destDir, name)
+  silentRm(dstfpath)
 
   const tmpfname = name + '.tmp'
   const tmpfpath = path.join(destDir, tmpfname)
@@ -218,25 +224,10 @@ async function download({ downloadUrl, name, size }, destDir) {
 
   console.log(`Downloading plot to ${tmpfname}...`)
   
-  process.stdout.write('Progress: 0%\r')
-
-  let intpercentage = 0
-  const downloader = new Downloader({     
-    url: downloadUrl,     
-    directory: destDir,
-    fileName: tmpfname,
-    onProgress: function(percentage, chunk, remainingSize) {
-      if (intpercentage !== percentage | 0) {
-        intpercentage = percentage | 0
-        process.stdout.write('Progress: ' + intpercentage + '\r')
-        
-      }
-    } 
-  }) 
 
 
   try {
-    await downloader.download();   
+    await curlExec(`-o ${tmpfname} ${downloadUrl}`)  
 
     console.log(`\nRenaming plot ot ${dstfpath}...`)
     fs.renameSync(tmpfpath, dstfpath)

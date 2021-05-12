@@ -144,9 +144,13 @@ void async function main() {
 
         let valid = false
         while (!valid && retries-- > 0) {
+          await new Promise(resolve => setTimeout(resolve, 5000)) 
+
           valid = await chiaValidatePlot(plotPath)          
 
-          if (!valid) await new Promise(resolve => setTimeout(resolve, 5000)) 
+          if (!valid) {
+            console.log(`Plot is not YET valid, may be later...`)            
+          }
         }
         
         if (valid) {

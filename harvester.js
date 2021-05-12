@@ -9,12 +9,11 @@ const stream = require('stream')
 const createProgressStream = require('progress-stream')
 const exec = promisify(require('child_process').exec)
 
-
+console.log(`[Harvester] Starting up...`)
+const config = loadConfig()
 
 void async function main() {
-  console.log(`[Harvester] Starting up...`)
 
-  const config = await loadConfig()
   const driveManager = new DriveManager(config.parentMount)
 
   console.log(`Updating drives list...`)
@@ -27,6 +26,9 @@ void async function main() {
   void async function fetchPlots() {
     await driveManager.update()
 
+    for (const { path } of driveManager.drives) {
+      await chiaExec(`plots add -d ${path}`)
+    }
 
     for (const farmer of farmers) {
       if (farmer.busy) continue
@@ -44,7 +46,7 @@ void async function main() {
         }
 
         const plotPath = await download(plot, drivePath)
-        const valid = await chiaValidatePlot(config.chiaDir, plotPath)
+        const valid = await chiaValidatePlot(plotPath)
         if (valid) {
           await farmer.remove(plot)
         } else {
@@ -66,24 +68,32 @@ function loadConfig() {
   return JSON.parse(fs.readFileSync(path.resolve(__dirname, 'harvester.json'), 'utf-8'))
 }
 
-
-async function chiaValidatePlot(cwd, plot) {
-  try {
-    const shell = `/bin/bash`
-    const { stderr = '' } = await exec(`${shell} -c 'cd ${cwd}; . ./activate; chia plots check -g ${plot};'`)
-    const match = /Found\s(\d+)\svalid\splots/g.exec(stderr)
-    const validPlotCount = (match || [])[1] || 0
-
-    if (validPlotCount > 1) {
-      console.error(`ERROR: more than one valid plot returned by chiaValidate`)
-    }
-
-    return validPlotCount === 1
-  } catch (error) {
-    console.log(`it's ok if you are on windows`, error)
-    return 0
+async function chiaValidatePlot(plot) {
+  const { ok, stderr } = chiaExec(`plots check -g ${plot}`)
+  if (!ok) {
+    return false
   }
 
+  const match = /Found\s(\d+)\svalid\splots/g.exec(stderr)
+  const validPlotCount = (match || [])[1] || 0
+
+  if (validPlotCount > 1) {
+    console.error(`ERROR: more than one valid plot returned by chiaValidate`)
+  }
+
+  return validPlotCount === 1
+}
+
+async function chiaExec(command) {
+  try {
+    console.log(`[chia] ${command}`)
+    const shell = `/bin/bash`
+    const { stdout = '', stderr = '' } = await exec(`${shell} -c 'cd ${config.chiaDir}; . ./activate; chia ${command}'`)
+    return { ok: true, stdout, stderr }
+  } catch (error) {
+    console.log(`it's ok if you are on windows`, error)
+    return { ok: false, stdout: '', stderr: '' }
+  }
 }
 
 async function download({ downloadUrl, name, size }, destDir) {
@@ -240,6 +250,6 @@ class Farmer {
   }
 
   async remove({ name }) {
-    await axios.get(this.url + 'remove/' + name)    
-  } 
+    await axios.get(this.url + 'remove/' + name)
+  }
 }

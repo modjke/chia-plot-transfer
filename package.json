@@ -15,6 +15,7 @@
     "glob": "^7.1.7",
     "koa": "^2.13.1",
     "koa-body": "^4.2.0",
-    "koa-respond": "^2.1.0"
+    "koa-respond": "^2.1.0",
+    "progress-stream": "^2.0.0"
   }
 }

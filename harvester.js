@@ -120,6 +120,10 @@ void async function main() {
       await chiaExec(`plots add -d ${path}`)
     }
 
+    // shuffle farmers
+
+    shuffle(farmers)
+
     for (const farmer of farmers) {
       if (farmer.busy) continue
 
@@ -167,6 +171,17 @@ void async function main() {
   }()
 
 }()
+
+function shuffle(array) {
+  let n = array.length * 3
+  while (n-- > 0) {
+    const a = array.length * Math.random() | 0
+    const b = array.length * Math.random() | 0
+    const t = array[a]
+    array[a] = array[b]
+    array[b] = t
+  }
+}
 
 function loadConfig() {
   return JSON.parse(fs.readFileSync(path.resolve(__dirname, 'harvester.json'), 'utf-8'))

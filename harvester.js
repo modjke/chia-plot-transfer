@@ -137,13 +137,13 @@ void async function main() {
 
         const plotPath = await download(plot, drivePath)
 
-        let retries = 10
+        let retries = 100
 
         let valid = false
         while (!valid && retries-- > 0) {
-          await new Promise(resolve => setTimeout(resolve, 5000)) 
+          await new Promise(resolve => setTimeout(resolve, 3000)) 
 
-          valid = await chiaValidatePlot(plotPath)          
+          valid = await chiaValidatePlot(plot.name)          
 
           if (!valid) {
             console.log(`Plot is not YET valid, may be later...`)            
@@ -225,22 +225,25 @@ async function download({ downloadUrl, name, size }, destDir) {
   console.log(`Downloading plot to ${tmpfname}...`)
   
 
+  process.stdout.write('Progress: 0%\r')
+  const stopWatch = watchFileSize(tmpfpath, 5000, (currentSize) => {
+    const prog = (100 * currentSize / size).toFixed(1)
+    process.stdout.write(`Progress: ${prog}%\r`)
+  })
 
   try {
-    process.stdout.write('Progress: 0%\r')
-    const stopWatch = watchFileSize(tmpfpath, 5000, (currentSize) => {
-      const prog = (100 * currentSize / size).toFixed(1)
-      process.stdout.write(`Progress: ${prog}%\r`)
-    })
+    
     await curlExec(`-o ${tmpfpath} ${downloadUrl}`)  
-
     stopWatch()
+   
 
     console.log(`\nRenaming plot ot ${dstfpath}...`)
     fs.renameSync(tmpfpath, dstfpath)
 
     return dstfpath
   } catch (error) {
+    stopWatch()
+
     console.error(`Encountered error while downloading plot: ${name}`)
     console.error(error)
 
@@ -248,7 +251,7 @@ async function download({ downloadUrl, name, size }, destDir) {
     silentRm(dstfpath)    
 
     throw new Error(`Unable to download`)
-  }
+  } 
 }
 
 function silentRm(filepath) {

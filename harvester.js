@@ -38,7 +38,12 @@ class DriveManager {
         path: p,
         bytes
       }
-    })
+    }).filter(d => {
+      if (config.ignore) {
+        return config.ignore.indexOf(d.path) === -1
+      }
+      return true
+    });
 
 
   }
@@ -63,7 +68,15 @@ class Farmer {
       this.url += '/'
     }
 
-    this.busy = false
+    this.plotCount = 0
+  }
+
+  async update() {
+    try {
+      this.plotCount = (await axios.get(this.url)).data.length
+    } catch (ignore) {
+      this.plotCount = -1
+    }
   }
 
   async getPlot() {
@@ -114,31 +127,31 @@ void async function main() {
 
 
   void async function fetchPlots() {
-    await driveManager.update()
-
-    for (const { path } of driveManager.drives) {
-      await chiaExec(`plots add -d ${path}`)
-    }
-
-    // shuffle farmers
-
-    shuffle(farmers)
+    await Promise.all(farmers.map(farmer => farmer.update()))
 
     for (const farmer of farmers) {
-      if (farmer.busy) continue
+      console.log(`${farmer.url} - ${farmer.plotCount}`)
+    }
 
+    farmers.sort((a, b) => b.plotCount - a.plotCount)
+
+    const [ farmer ] = farmers
+    if (farmer.plotCount > 0) {
       try {
         const plot = await farmer.getPlot()
-
-        if (!plot) continue
-
+        
         console.log(`Found a plot ${farmer.url} > ${plot.name}`)
 
+        await driveManager.update()
+
+        await Promise.all(driveManager.drives.map(({ path }) => chiaExec(`plots add -d ${path}`)))        
+        
         const drivePath = await driveManager.getDrive(plot.size)
         if (!drivePath) {
           console.error(`ERROR: NO SPACE LEFT`)
         }
-
+    
+        console.log(`Downloading to ${drivePath}`)
         const plotPath = await download(plot, drivePath)
 
         let retries = 100
@@ -164,10 +177,10 @@ void async function main() {
       } catch (error) {
         console.error(error)
       }
-
-
-      setTimeout(fetchPlots, 60000)
     }
+  
+
+    setTimeout(fetchPlots, 500)
   }()
 
 }()
@@ -205,7 +218,7 @@ async function chiaValidatePlot(plot) {
 
 async function chiaExec(command) {
   try {
-    console.log(`[chia] ${command}`)
+    // console.log(`[chia] ${command}`)
     const shell = `/bin/bash`
     const { stdout = '', stderr = '' } = await exec(`${shell} -c 'cd ${config.chiaDir}; . ./activate; chia ${command}'`)
     return { ok: true, stdout, stderr }
@@ -241,7 +254,7 @@ async function download({ downloadUrl, name, size }, destDir) {
   
 
   process.stdout.write('Progress: 0%\r')
-  const stopWatch = watchFileSize(tmpfpath, 5000, (currentSize) => {
+  const stopWatch = watchFileSize(tmpfpath, 2000, (currentSize) => {
     const prog = (100 * currentSize / size).toFixed(1)
     process.stdout.write(`Progress: ${prog}%\r`)
   })

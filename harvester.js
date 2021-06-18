@@ -9,8 +9,6 @@ const exec = promisify(require('child_process').exec)
 console.log(`[Harvester] Starting up...`)
 const config = loadConfig()
 
-const MAX_BUSY_FARMERS = 3
-
 
 class DriveManager {
   constructor(parentMount) {
@@ -189,11 +187,6 @@ void async function main() {
       }
     }
 
-    const busyFarmers = farmers.filter(f => f.busy)
-    if (busyFarmers >= MAX_BUSY_FARMERS) {
-      return
-    }
-
     const sortedFarmersThatAreNotBusy = farmers
       .filter(f => !f.busy && f.plotCount > 0)
       .sort((a, b) => b.plotCount - a.plotCount)
@@ -211,7 +204,7 @@ void async function main() {
 
    void async function tick() {
     await fetchNextPlot()
-    setTimeout(tick, 5000)
+    setTimeout(tick, 30000)
   }()
 }()
 

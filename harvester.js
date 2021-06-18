@@ -241,7 +241,7 @@ async function __download(downloadUrl, size, tmpfile, dstfile) {
     await curlExec(`-o ${tmpfile} ${downloadUrl}`)  
 
     // size check
-    const stat = await fs.stat(tmpfile)
+    const stat = fs.statSync(tmpfile)
     if (stat.size !== size) {
       throw new Error(`Size mismatch: ${stat.size}, but expected: ${size}`)  
     }

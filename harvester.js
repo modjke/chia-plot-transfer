@@ -113,6 +113,11 @@ class Farmer {
   }
 
   async download(driveManager) {
+    if (this.busy) {
+      console.log(this.url, `Trying to download while busy`)
+      return
+    }
+    
     if (this.error) {
       console.error(this.url, `Not downloading anything due to error`)
       return

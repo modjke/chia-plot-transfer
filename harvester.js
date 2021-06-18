@@ -9,10 +9,13 @@ const exec = promisify(require('child_process').exec)
 console.log(`[Harvester] Starting up...`)
 const config = loadConfig()
 
+const MAX_BUSY_FARMERS = 3
+
 
 class DriveManager {
   constructor(parentMount) {
     this.parentMount = path.resolve(__dirname, parentMount)
+    this.reservations = {}
   }
 
   async update() {
@@ -44,20 +47,23 @@ class DriveManager {
       }
       return true
     });
-
-
   }
 
-  getDrive(size) {
+  makeReservation(size) {
     const drive = this.drives.find(drive => {
-      return drive.bytes.available > size
+      return !this.reservations[drive.path] && drive.bytes.available > size
     })
 
     if (!drive) {
       return null
     }
 
-    return drive.path
+    return this.reservations[drive.path] = {
+      dir: drive.path,
+      release: () => {
+        delete this.reservations[drive.path]
+      }
+    }
   }
 }
 
@@ -67,28 +73,24 @@ class Farmer {
     if (!this.url.endsWith('/')) {
       this.url += '/'
     }
+    
+    this.plots = []
+    this.error = false
+    this.busy = false
+  }
 
-    this.plotCount = 0
+  get plotCount() {
+    return this.error ? -1 : this.plots.length
   }
 
   async update() {
-    try {
-      this.plotCount = (await axios.get(this.url)).data.length
-    } catch (ignore) {
-      this.plotCount = -1
-    }
-  }
-
-  async getPlot() {
     try {
       const res = await axios.get(this.url)
       if (!Array.isArray(res.data)) {
         throw new Error(`Recieved data is not an array`)
       }
 
-      if (res.data.length) {
-        const [name] = res.data
-
+      this.plots = await Promise.all(res.data.map(async name => {
         const downloadUrl = this.url + 'download/' + name
 
         const { headers: { 'content-length': contentLength } } = await axios.head(downloadUrl)
@@ -102,12 +104,58 @@ class Farmer {
           size,
           name
         }
-      }
+      }))
+
+      this.error = false     
+    } catch (ignore) {
+      this.error = true
+    }
+  }
+
+  async download(driveManager) {
+    if (this.error) {
+      console.error(this.url, `Not downloading anything due to error`)
+      return
+    }
+
+    const [ plot ] = this.plots
+
+    if (!plot) {
+      console.error(this.url, `Not downloading anything due to no plots`)
+      return
+    }
+
+    
+    const reservation = driveManager.makeReservation(plot.size)
+    if (!reservation) {
+      console.error(`Unable to make reservation :(`)
+      return
+    }
+
+    this.busy = true
+    this.plot = plot
+    this.percent = 0
+
+    const dstfile = path.join(reservation.dir, plot.name)        
+    const tmpfile = path.join(reservation.dir, plot.name + '.tmp')
+    
+    const stopWatch = watchFileSize(tmpfile, 2000, size => {
+      this.percent = 100 * size / plot.size      
+    })
+
+    try {      
+      await __download(plot.downloadUrl, plot.size, tmpfile, dstfile)
+      await this.remove(plot)
+      this.percent = 100
     } catch (error) {
+      console.error(this.url, `Encountered error while downloading plot: ${plot.name}`)
       console.error(error)
     }
 
-    return null;
+    reservation.release()
+    stopWatch()
+
+    this.busy = false
   }
 
   async remove({ name }) {
@@ -125,107 +173,46 @@ void async function main() {
 
   const farmers = config.farmers.map(url => new Farmer(url))
 
-
-  void async function fetchPlots() {
+  async function fetchNextPlot() {    
     await Promise.all(farmers.map(farmer => farmer.update()))
 
     for (const farmer of farmers) {
+      console.log(new Date())      
       console.log(`${farmer.url} - ${farmer.plotCount}`)
-    }
-
-    farmers.sort((a, b) => b.plotCount - a.plotCount)
-
-    const [ farmer ] = farmers
-    if (farmer.plotCount > 0) {
-      try {
-        const plot = await farmer.getPlot()
-        
-        console.log(`Found a plot ${farmer.url} > ${plot.name}`)
-
-        await driveManager.update()
-
-        await Promise.all(driveManager.drives.map(({ path }) => chiaExec(`plots add -d ${path}`)))        
-        
-        const drivePath = await driveManager.getDrive(plot.size)
-        if (!drivePath) {
-          console.error(`ERROR: NO SPACE LEFT`)
-        }
-    
-        console.log(`Downloading to ${drivePath}`)
-        const plotPath = await download(plot, drivePath)
-
-        let retries = 100
-
-        let valid = false
-        while (!valid && retries-- > 0) {
-          await new Promise(resolve => setTimeout(resolve, 3000)) 
-
-          valid = await chiaValidatePlot(plot.name)          
-
-          if (!valid) {
-            console.log(`Plot is not YET valid, may be later...`)            
-          }
-        }
-        
-        if (valid) {
-          console.log(`Good plot: `, plotPath)
-          await farmer.remove(plot)
-        } else {
-          silentRm(plotPath)
-          console.error(`ERROR: INVALID PLOT!!!`, plotPath)
-        }
-      } catch (error) {
-        console.error(error)
+      if (farmer.busy) {
+        console.log(`- (${famrer.percent.toFixed(1)}%) -> ${farmer.plot.name}`)
       }
     }
-  
 
-    setTimeout(fetchPlots, 500)
+    const busyFarmers = farmers.filter(f => f.busy)
+    if (busyFarmers >= MAX_BUSY_FARMERS) {
+      return
+    }
+
+    const sortedFarmersThatAreNotBusy = farmers
+      .filter(f => !f.busy && f.plotCount > 0)
+      .sort((a, b) => b.plotCount - a.plotCount)
+
+    if (sortedFarmersThatAreNotBusy.length === 0) {
+      return
+    }
+
+    const [ farmer ] = sortedFarmersThatAreNotBusy
+    
+    await driveManager.update()
+    
+    farmer.download(driveManager)
+  }
+
+   void async function tick() {
+    await fetchNextPlot()
+    setTimeout(tick, 5000)
   }()
-
 }()
 
-function shuffle(array) {
-  let n = array.length * 3
-  while (n-- > 0) {
-    const a = array.length * Math.random() | 0
-    const b = array.length * Math.random() | 0
-    const t = array[a]
-    array[a] = array[b]
-    array[b] = t
-  }
-}
 
 function loadConfig() {
   return JSON.parse(fs.readFileSync(path.resolve(__dirname, 'harvester.json'), 'utf-8'))
-}
-
-async function chiaValidatePlot(plot) {
-  const { ok, stderr } = await chiaExec(`plots check -g ${plot}`)
-  if (!ok) {
-    return false
-  }
-
-  const match = /Found\s(\d+)\svalid\splots/g.exec(stderr)
-  const validPlotCount = parseInt((match || [])[1] || '0')
-
-  if (validPlotCount > 1) {
-    console.error(`ERROR: more than one valid plot returned by chiaValidate`)
-  }
-
-  return validPlotCount === 1
-}
-
-async function chiaExec(command) {
-  try {
-    // console.log(`[chia] ${command}`)
-    const shell = `/bin/bash`
-    const { stdout = '', stderr = '' } = await exec(`${shell} -c 'cd ${config.chiaDir}; . ./activate; chia ${command}'`)
-    return { ok: true, stdout, stderr }
-  } catch (error) {
-    console.log(`it's ok if you are on windows`, error)
-    return { ok: false, stdout: '', stderr: '' }
-  }
 }
 
 
@@ -241,44 +228,26 @@ async function curlExec(command) {
   }
 }
 
-async function download({ downloadUrl, name, size }, destDir) {
-  const dstfpath = path.join(destDir, name)
-  silentRm(dstfpath)
-
-  const tmpfname = name + '.tmp'
-  const tmpfpath = path.join(destDir, tmpfname)
-  silentRm(tmpfpath)
+async function __download(downloadUrl, size, tmpfile, dstfile) {  
+  silentRm(dstfile)
+  silentRm(tmpfile)
   
-
-  console.log(`Downloading plot to ${tmpfname}...`)
-  
-
-  process.stdout.write('Progress: 0%\r')
-  const stopWatch = watchFileSize(tmpfpath, 2000, (currentSize) => {
-    const prog = (100 * currentSize / size).toFixed(1)
-    process.stdout.write(`Progress: ${prog}%\r`)
-  })
-
   try {
-    
-    await curlExec(`-o ${tmpfpath} ${downloadUrl}`)  
-    stopWatch()
+    await curlExec(`-o ${tmpfile} ${downloadUrl}`)  
+
+    // size check
+    const stat = await fs.stat(tmpfile)
+    if (stat.size !== size) {
+      throw new Error(`Size mismatch: ${stat.size}, but expected: ${size}`)  
+    }
    
+    console.log(`\nRenaming plot ot ${dstfile}...`)
+    fs.renameSync(tmpfile, dstfile)    
+  } catch (error) {        
+    silentRm(tmpfile)
+    silentRm(dstfile)    
 
-    console.log(`\nRenaming plot ot ${dstfpath}...`)
-    fs.renameSync(tmpfpath, dstfpath)
-
-    return dstfpath
-  } catch (error) {
-    stopWatch()
-
-    console.error(`Encountered error while downloading plot: ${name}`)
-    console.error(error)
-
-    silentRm(tmpfname)
-    silentRm(dstfpath)    
-
-    throw new Error(`Unable to download`)
+    throw error
   } 
 }
 

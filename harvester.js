@@ -117,7 +117,7 @@ class Farmer {
       console.log(this.url, `Trying to download while busy`)
       return
     }
-    
+
     if (this.error) {
       console.error(this.url, `Not downloading anything due to error`)
       return
@@ -174,18 +174,18 @@ void async function main() {
 
   console.log(`Updating drives list...`)
   await driveManager.update()
-  console.log(driveManager.drives.map(drive => drive.path).join('\n'))
+  // console.log(driveManager.drives.map(drive => drive.path).join('\n'))
 
   const farmers = config.farmers.map(url => new Farmer(url))
 
   async function fetchNextPlot() {    
     await Promise.all(farmers.map(farmer => farmer.update()))
 
-    for (const farmer of farmers) {
-      console.log(new Date())      
+    console.log(new Date())      
+    for (const farmer of farmers) {      
       console.log(`${farmer.url} - ${farmer.plotCount}`)
       if (farmer.busy) {
-        console.log(`- (${famrer.percent.toFixed(1)}%) -> ${farmer.plot.name}`)
+        console.log(`- (${farmer.percent.toFixed(1)}%) -> ${farmer.plot.name}`)
       }
     }
 

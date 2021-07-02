@@ -167,7 +167,7 @@ class Farmer {
       return
     }
 
-    console.log(`Looking for a place to put plot with size: ${fileSizeFormat(plot.size)}...`)
+    console.log(`Looking for a place to put plot with size: ${gb(plot.size)}...`)
     const reservation = driveManager.makeReservation(plot.size)
     if (!reservation) {
       console.error(`Unable to make reservation :(`)
@@ -179,13 +179,13 @@ class Farmer {
       console.log(`Made sub reservation at ${reservation.dir}`)
       console.log(`Plot eligable for removal:`)
       const [a,b] = reservation.k32s
-      console.log(a.path, `size: ${a.size}`)
-      console.log(b.path, `size: ${b.size}`)
+      console.log(a.path, `size: ${gb(a.size)}`)
+      console.log(b.path, `size: ${gb(b.size)}`)
 
-      console.log(`Available space: ${reservation.available}`)
-      console.log(`Available space after removal: ${reservation.available + a.size + b.size}`)
-      console.log(`Target plot size: ${plot.size}`)
-      console.log(`Space left after new plot is downloaded: ${reservation.available + a.size + b.size - plot.size}`)
+      console.log(`Available space: ${gb(reservation.available)}`)
+      console.log(`Available space after removal: ${gb(reservation.available + a.size + b.size)}`)
+      console.log(`Target plot size: ${gb(plot.size)}`)
+      console.log(`Space left after new plot is downloaded: ${gb(reservation.available + a.size + b.size - plot.size)}`)
     } else {
       console.log(`Made regular reservation at ${reservation.dir}`)
     }
@@ -329,6 +329,6 @@ function watchFileSize(fpath, ms, callback) {
   }
 }
 
-function fileSizeFormat(bytes) {
+function gb(bytes) {
   return (bytes / 1000 / 1000 / 1000).toFixed(2) + ' GB'
 }

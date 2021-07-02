@@ -34,10 +34,20 @@ class DriveManager {
 
     this.drives = drivePaths.map((p, i) => {
       const bytes = drivesFreeSpaces[i]
+      
+      const plots = fs.readdirSync(p)
+        .filter(f => f.endsWith('.plot'))
+        .map(f => path.join(p, f))
+        .map(f => {
+          const { size } = fs.statSync(f)
+          return { path: f, size }
+        })
+      
 
       return {
         path: p,
-        bytes
+        bytes,
+        plots
       }
     }).filter(d => {
       if (config.ignore) {
@@ -48,16 +58,45 @@ class DriveManager {
   }
 
   makeReservation(size) {
-    const drive = this.drives.find(drive => {
-      return !this.reservations[drive.path] && drive.bytes.available > size
+    let drive = this.drives.find(drive => {      
+      return !this.reservations[drive.path] &&
+        drive.bytes.available > size
     })
 
+
+    let k32s = null
+
     if (!drive) {
-      return null
+      drive = this.drives.find(drive => {
+        
+        const k32plots = plots.filter(({ path }) => path.indexOf('plot-k32-') > -1)
+        
+        if (k32.length >= 8) {
+          k32plots.sort((a,b) => b.size - a.size)
+          const [p1, p2] = k32plots // two larges k32 plots
+
+          if (drive.bytes.available + p1.size + p2.size > size) {
+            k32s = k32plots
+            return true
+          } else {
+            return false
+          }
+        }
+
+        return false
+      })
+
+      if (!drive) {
+        return null
+      }
     }
 
+
     return this.reservations[drive.path] = {
+      k32s,
       dir: drive.path,
+      files: drive.files,  
+      available: drive.bytes.available,    
       release: () => {
         delete this.reservations[drive.path]
       }
@@ -128,16 +167,36 @@ class Farmer {
       return
     }
 
-    
+    console.log(`Looking for a place to put plot with size: ${fileSizeFormat(plot.size)}...`)
     const reservation = driveManager.makeReservation(plot.size)
     if (!reservation) {
       console.error(`Unable to make reservation :(`)
       return
     }
 
+
+    if (reservation.k32s) {
+      console.log(`Made sub reservation at ${reservation.dir}`)
+      console.log(`Plot eligable for removal:`)
+      const [a,b] = reservation.k32s
+      console.log(a.path, `size: ${a.size}`)
+      console.log(b.path, `size: ${b.size}`)
+
+      console.log(`Available space: ${reservation.available}`)
+      console.log(`Available space after removal: ${reservation.available + a.size + b.size}`)
+      console.log(`Target plot size: ${plot.size}`)
+      console.log(`Space left after new plot is downloaded: ${reservation.available + a.size + b.size - plot.size}`)
+    } else {
+      console.log(`Made regular reservation at ${reservation.dir}`)
+    }
+
+    return  
+
     this.busy = true
     this.plot = plot
     this.percent = 0
+
+    
 
     const dstfile = path.join(reservation.dir, plot.name)        
     const tmpfile = path.join(reservation.dir, plot.name + '.tmp')
@@ -268,4 +327,8 @@ function watchFileSize(fpath, ms, callback) {
   return function () {
     clearInterval(interval)
   }
+}
+
+function fileSizeFormat(bytes) {
+  return (bytes / 1000 / 1000 / 1000).toFixed(2) + ' GB'
 }

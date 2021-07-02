@@ -71,7 +71,7 @@ class DriveManager {
         
         const k32plots = drive.plots.filter(({ path }) => path.indexOf('plot-k32-') > -1)
         
-        if (k32.length >= 8) {
+        if (k32plots.length >= 8) {
           k32plots.sort((a,b) => b.size - a.size)
           const [p1, p2] = k32plots // two larges k32 plots
 

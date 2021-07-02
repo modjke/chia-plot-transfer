@@ -190,11 +190,15 @@ class Farmer {
       console.log(`Target plot size: ${gb(plot.size)}`)
       console.log(`Space left after new plot is downloaded: ${gb(after)}`)
       console.log(`Plots space will be increased by ${gb(before - after)}`)
+
+      console.log(`Removing ${a.path}...`)      
+      silentRm(a.path)
+      console.log(`Removing ${b.path}...`)      
+      silentRm(b.path)      
     } else {
       console.log(`Made regular reservation at ${reservation.dir}`)
     }
 
-    return  
 
     this.busy = true
     this.plot = plot
@@ -210,6 +214,7 @@ class Farmer {
     })
 
     try {      
+      
       await __download(plot.downloadUrl, plot.size, tmpfile, dstfile)
       await this.remove(plot)
       this.percent = 100

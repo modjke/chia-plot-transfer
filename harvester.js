@@ -189,7 +189,7 @@ class Farmer {
       console.log(`Available space after removal: ${gb(reservation.available + a.size + b.size)}`)
       console.log(`Target plot size: ${gb(plot.size)}`)
       console.log(`Space left after new plot is downloaded: ${gb(after)}`)
-      console.log(`Plots space will be increased by ${gb(after - before)}`)
+      console.log(`Plots space will be increased by ${gb(before - after)}`)
     } else {
       console.log(`Made regular reservation at ${reservation.dir}`)
     }

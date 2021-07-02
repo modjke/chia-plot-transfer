@@ -66,10 +66,10 @@ class DriveManager {
 
     let k32s = null
 
-    if (!drive) {
+    if (drive) {
       drive = this.drives.find(drive => {
         
-        const k32plots = plots.filter(({ path }) => path.indexOf('plot-k32-') > -1)
+        const k32plots = drive.plots.filter(({ path }) => path.indexOf('plot-k32-') > -1)
         
         if (k32.length >= 8) {
           k32plots.sort((a,b) => b.size - a.size)
